@@ -1,0 +1,31 @@
+name: Build Fly Chicken Windows EXE
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: جلب ملفات المشروع
+        uses: actions/checkout@v4
+
+      - name: تجهيز بيئة Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: تثبيت المكتبات
+        run: npm install
+
+      - name: تجميع ملف الـ EXE
+        run: npm run build-exe
+
+      - name: رفع ملف التطبيق الجاهز كـ Artifact للتحميل
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlyChicken-Windows-App
+          path: dist/
