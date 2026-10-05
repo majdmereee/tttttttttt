@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fly Chicken | شاشة الكاشير والمطبخ واستوديو التصميم</title>
+
+    <!-- خط تجوال العريض الرسمي -->
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- مكتبة الأيقونات الرسمية Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- ملفات التنسيق المنفصلة -->
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/studio.css">
+
+    <!-- مكتبات Firebase السحابية -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+    <!-- شريط تفعيل الصوت في حال تم تقييده من المتصفح -->
+    <div id="audio-unlock-banner" onclick="unlockAudioSystem()">
+        <i class="fas fa-volume-up"></i> انقر هنا لتفعيل التنبيهات الصوتية الحية لطلبات الكاشير ورسائل الزبائن
+    </div>
+
+    <!-- حاوية التوستات التفاعلية المنبثقة -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- الشريط العلوي والتنقل بين التابات -->
+    <header class="top-navbar">
+        <div class="brand">
+            <div class="brand-logo"><i class="fas fa-drumstick-bite"></i></div>
+            <div class="brand-text">
+                <h1>FLY CHICKEN</h1>
+                <span>KDS & STUDIO ENTERPRISE</span>
+            </div>
+        </div>
+
+        <nav class="nav-pills">
+            <button class="nav-pill active" onclick="switchMainView('kanban', this)">
+                <i class="fas fa-columns"></i> شاشة الطلبات الحية <span class="badge" id="badge-live-count">0</span>
+            </button>
+            <button class="nav-pill" id="nav-pill-chat" onclick="switchMainView('chat', this)">
+                <i class="fab fa-whatsapp"></i> مركز المحادثات <span class="badge-chat-unread" id="badge-chat-unread" style="display:none;">0</span>
+            </button>
+            <button class="nav-pill" onclick="switchMainView('studio', this)">
+                <i class="fas fa-palette"></i> استوديو المنيو والتصميم الحي
+            </button>
+            <button class="nav-pill" onclick="switchMainView('sales', this)">
+                <i class="fas fa-chart-line"></i> المبيعات والتكاليف
+            </button>
+            <button class="nav-pill" onclick="switchMainView('customers', this)">
+                <i class="fas fa-users"></i> تقارير الزبائن CRM
+            </button>
+            <button class="nav-pill" onclick="switchMainView('settings', this)">
+                <i class="fas fa-cog"></i> الإعدادات والأرشيف
+            </button>
+        </nav>
+
+        <div class="header-actions">
+            <button class="btn-wa-header disconnected" id="btn-wa-status" onclick="openWhatsAppModal()">
+                <i class="fab fa-whatsapp"></i>
+                <span id="text-wa-status">واتساب مفصول (مسح الكود)</span>
+            </button>
+            <button class="btn-action-top btn-export-html" onclick="requirePinAuth(() => exportCompleteDataHTML())">
+                <i class="fas fa-file-code"></i> استخراج الأرشيف
+            </button>
+            <button class="btn-action-top" id="sound-btn" onclick="toggleSound()">
+                <i class="fas fa-volume-up"></i>
+            </button>
+            <button class="btn-action-top" onclick="document.documentElement.requestFullscreen()">
+                <i class="fas fa-expand"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- شريط مراقبة التأخير وحالة الصالة -->
+    <div class="delay-monitor-bar">
+        <div class="monitor-stat-box" style="border-right: 4px solid var(--neon-red);">
+            <span style="color:var(--text-muted);"><i class="fas fa-exclamation-triangle" style="color:var(--neon-red);"></i> متأخر في التحضير بالمطبخ</span>
+            <span class="monitor-stat-num" id="stat-delayed-count" style="color:var(--neon-red);">0</span>
+        </div>
+        <div class="monitor-stat-box" style="border-right: 4px solid var(--neon-blue);">
+            <span style="color:var(--text-muted);"><i class="fas fa-clock" style="color:var(--neon-blue);"></i> إجمالي الطلبات النشطة</span>
+            <span class="monitor-stat-num" id="stat-total-display-count">0</span>
+        </div>
+    </div>
+
+    <!-- VIEW 1: شاشة الطلبات الحية (KANBAN) -->
+    <main class="view-content active" id="view-kanban">
+        <div class="kanban-board">
+            <div class="kanban-col col-pending">
+                <div class="col-header">
+                    <div class="col-title"><i class="fas fa-clock"></i> قائمة الانتظار (حذف بعد 60 ثانية)</div>
+                    <span class="col-count" id="count-pending">0</span>
+                </div>
+                <div class="col-body" id="col-pending-orders"></div>
+            </div>
+            <div class="kanban-col col-accepted">
+                <div class="col-header">
+                    <div class="col-title"><i class="fas fa-fire"></i> قيد التحضير في المطبخ</div>
+                    <span class="col-count" id="count-accepted">0</span>
+                </div>
+                <div class="col-body" id="col-accepted-orders"></div>
+            </div>
+            <div class="kanban-col col-done">
+                <div class="col-header">
+                    <div class="col-title"><i class="fas fa-check-double"></i> جاهزة للتسليم والتوصيل</div>
+                    <span class="col-count" id="count-done">0</span>
+                </div>
+                <div class="col-body" id="col-done-orders"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- VIEW 2: مركز المحادثات المباشر -->
+    <main class="view-content" id="view-chat">
+        <div class="chat-hub">
+            <div class="chat-contacts-sidebar">
+                <div class="chat-sidebar-header">
+                    <span style="font-weight:900; color:#e9edef;"><i class="fab fa-whatsapp" style="color:var(--wa-green); font-size:1.2rem;"></i> محادثات الزبائن الحية</span>
+                </div>
+                <div class="chat-search-box">
+                    <input type="text" class="chat-search-input" id="chat-search" placeholder="بحث باسم أو رقم الزبون..." oninput="filterChatContacts()">
+                </div>
+                <div class="chat-contacts-list" id="chat-contacts-container"></div>
+            </div>
+            <div class="chat-main-area">
+                <div class="chat-main-header">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <div class="contact-avatar" style="width:38px; height:38px;"><i class="fas fa-user"></i></div>
+                        <div>
+                            <h3 id="active-chat-title" style="font-weight:900; font-size:0.95rem; color:#e9edef;">اختر محادثة لبدء الدردشة</h3>
+                            <span id="active-chat-subtitle" style="font-size:0.75rem; color:#8696a0;">مباشر ولحظي</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-stream-bg" id="active-chat-messages">
+                    <div class="bubble-wa system">انقر على أي محادثة في القائمة لعرض الرسائل المتبادلة</div>
+                </div>
+                <div class="chat-send-bar">
+                    <input type="text" class="chat-input-field" id="chat-input-message" placeholder="اكتب ردك للزبون هنا مباشرة..." onkeydown="if(event.key==='Enter') sendChatMessageDirect()">
+                    <button class="btn-send-chat" onclick="sendChatMessageDirect()"><i class="fas fa-paper-plane"></i></button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- VIEW 3: استوديو التصميم الحي والتحكم بالمنيو -->
+    <main class="view-content" id="view-studio">
+        <div class="studio-layout">
+            <div class="studio-controls-panel">
+                <div class="studio-section-card">
+                    <div class="studio-card-title"><i class="fas fa-bullhorn"></i> إعلانات وبانر العروض الحية عند الزبون</div>
+                    <div style="display:flex; gap:10px;">
+                        <input type="text" id="studio-announcement-input" class="chat-search-input" placeholder="اكتب نص العرض (مثال: حسم 15% اليوم على الوجبات العائلية!)">
+                        <button class="btn-action-top" style="background:var(--primary); color:white; border:none;" onclick="saveStudioAnnouncement()">نشر العرض</button>
+                    </div>
+                </div>
+
+                <div class="studio-section-card">
+                    <div class="studio-card-title"><i class="fas fa-utensils"></i> إدارة المنيو وإيقاف/تشغيل الأصناف لحظياً</div>
+                    <p style="font-size:0.85rem; color:var(--text-muted);">الأصناف المقفلة ستظهر فوراً في هاتف الزبون بعبارة (نفدت الكمية لليوم) مع قفل الإضافة:</p>
+                    <table class="menu-manager-table">
+                        <thead>
+                            <tr>
+                                <th>الصنف</th>
+                                <th>السعر الحالي</th>
+                                <th>الحالة في المطبخ</th>
+                                <th>تعديل السعر</th>
+                            </tr>
+                        </thead>
+                        <tbody id="menu-manager-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="studio-preview-panel">
+                <div class="mobile-mockup-frame">
+                    <div class="mockup-speaker-notch"></div>
+                    <iframe class="mockup-iframe-view" id="studio-preview-iframe" src="customer/index.html"></iframe>
+                </div>
+                <button class="btn-action-top" style="margin-top:12px;" onclick="refreshStudioPreview()"><i class="fas fa-sync-alt"></i> تحديث شاشة الجوال</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- VIEW 4: المبيعات وهوامش الأرباح -->
+    <main class="view-content" id="view-sales">
+        <div class="content-scrollable">
+            <div class="filter-panel-box">
+                <div>
+                    <h2 style="font-size:1.25rem; font-weight:900;"><i class="fas fa-coins" style="color:var(--primary);"></i> تقرير مبيعات وأرباح الأصناف والتكاليف</h2>
+                    <span style="font-size:0.8rem; color:var(--text-muted);">تحتسب الوردية من 12:00 ظهراً وحتى 03:00 فجراً لتغطية ساعات العمل الليلية</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <button class="btn-action-top" style="background:var(--primary); color:white; border:none;" onclick="loadShiftReport('today')">
+                        <i class="fas fa-calendar-day"></i> وردية اليوم (12م - 3ص)
+                    </button>
+                    <input type="datetime-local" id="sales-start-datetime" class="btn-action-top">
+                    <span style="color:var(--text-muted); font-weight:800;">إلى</span>
+                    <input type="datetime-local" id="sales-end-datetime" class="btn-action-top">
+                    <button class="btn-action-top" onclick="loadShiftReport('custom')"><i class="fas fa-filter"></i> تطبيق الفلتر</button>
+                </div>
+            </div>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <span style="color:var(--text-muted); font-size:0.82rem; font-weight:800;">إجمالي الدخل المحقق</span>
+                    <span id="shift-total-sales" style="font-size:1.6rem; font-weight:900; color:var(--neon-green);">0 ل.س</span>
+                </div>
+                <div class="metric-card">
+                    <span style="color:var(--text-muted); font-size:0.82rem; font-weight:800;">التكلفة الفعلية (Food Cost)</span>
+                    <span id="shift-total-costs" style="font-size:1.6rem; font-weight:900; color:var(--neon-red);">0 ل.س</span>
+                </div>
+                <div class="metric-card">
+                    <span style="color:var(--text-muted); font-size:0.82rem; font-weight:800;">صافي الربح التقديري</span>
+                    <span id="shift-net-profit" style="font-size:1.6rem; font-weight:900; color:var(--neon-blue);">0 ل.س</span>
+                </div>
+                <div class="metric-card">
+                    <span style="color:var(--text-muted); font-size:0.82rem; font-weight:800;">الطلبات المكتملة</span>
+                    <span id="shift-orders-count" style="font-size:1.6rem; font-weight:900; color:white;">0</span>
+                </div>
+            </div>
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-xl); padding:16px;">
+                <h3 style="font-weight:900; margin-bottom:12px;"><i class="fas fa-drumstick-bite" style="color:var(--primary);"></i> جدول مبيعات وهوامش ربح الأصناف</h3>
+                <table class="data-table">
+                    <thead><tr><th>الصنف</th><th>الكمية</th><th>إجمالي المبيعات</th><th>التكلفة للوجبة</th><th>إجمالي التكاليف</th><th>صافي الربح</th><th>الهامش</th></tr></thead>
+                    <tbody id="items-sales-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- VIEW 5: تقارير الزبائن CRM -->
+    <main class="view-content" id="view-customers">
+        <div class="content-scrollable">
+            <div class="filter-panel-box">
+                <div>
+                    <h2 style="font-size:1.25rem; font-weight:900;"><i class="fas fa-users" style="color:var(--primary);"></i> تقارير وتحليلات الزبائن (CRM)</h2>
+                </div>
+                <div style="width:300px;">
+                    <input type="text" class="chat-search-input" id="crm-search" placeholder="بحث باسم الزبون أو رقمه..." oninput="filterCustomerTable()">
+                </div>
+            </div>
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-xl); padding:16px;">
+                <table class="data-table">
+                    <thead><tr><th>اسم الزبون</th><th>التصنيف</th><th>الرقم</th><th>الهاتف الإضافي</th><th>الطلبات</th><th>إجمالي الإنفاق</th><th>متوسط الفاتورة</th><th>الوجبة المفضلة</th><th>العناوين</th><th>مراسلة</th></tr></thead>
+                    <tbody id="customers-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- VIEW 6: الإعدادات والأرشيف المستقل -->
+    <main class="view-content" id="view-settings">
+        <div class="content-scrollable">
+            <h2 style="font-size:1.3rem; font-weight:900;"><i class="fas fa-cog" style="color:var(--primary);"></i> إعدادات النظام وتصدير الأرشيف</h2>
+            <div class="detail-card">
+                <div class="detail-card-title"><i class="fas fa-percentage"></i> نسبة تكلفة الوجبات الافتراضية (Food Cost %)</div>
+                <div style="display:flex; gap:10px; max-width:280px; align-items:center;">
+                    <input type="number" id="setting-cost-ratio" class="chat-search-input" value="55" min="10" max="90">
+                    <span style="font-weight:900;">%</span>
+                    <button class="btn-action-top" onclick="saveCostRatio()">حفظ النسبة</button>
+                </div>
+            </div>
+            <div class="detail-card" style="border-right: 4px solid var(--primary);">
+                <h3 style="font-weight:900; margin-bottom:8px;"><i class="fas fa-file-code" style="color:var(--primary);"></i> استخراج أرشيف مستقل HTML بالكامل</h3>
+                <button class="btn-action-top btn-export-html" style="height:44px; font-size:0.95rem;" onclick="requirePinAuth(() => exportCompleteDataHTML())">
+                    <i class="fas fa-download"></i> تصدير وتحميل ملف الأرشيف HTML الآن
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- النوافذ المنبثقة (MODALS) -->
+
+    <!-- مودال الباركود والاتصال بواتساب -->
+    <div class="modal-overlay" id="whatsapp-modal">
+        <div class="modal-box" style="max-width: 440px; text-align: center;">
+            <div class="modal-header">
+                <h3 style="font-weight:900; color:var(--wa-green);"><i class="fab fa-whatsapp"></i> ربط ومسح باركود الواتساب</h3>
+                <button class="close-btn" onclick="closeModal('whatsapp-modal')"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" style="align-items: center; justify-content: center; min-height: 330px;">
+                <div id="wa-state-loading" style="display:flex; flex-direction:column; align-items:center; gap:12px;">
+                    <i class="fas fa-spinner fa-spin fa-3x" style="color:var(--primary);"></i>
+                    <p style="font-weight:800; color:var(--text-muted);">جاري فحص حالة الاتصال وتوليد الباركود...</p>
+                </div>
+                <div id="wa-state-qr" style="display:none; flex-direction:column; align-items:center; gap:10px;">
+                    <p style="font-size:0.88rem; color:var(--text-muted); font-weight:700;">افتح واتساب في جوالك > الأجهزة المرتبطة > امسح الرمز:</p>
+                    <div style="background:#ffffff; padding:14px; border-radius:14px; display:inline-block;">
+                        <img id="wa-qr-img" src="" style="width:250px; height:250px; display:block;" alt="QR">
+                    </div>
+                </div>
+                <div id="wa-state-connected" style="display:none; flex-direction:column; align-items:center; gap:10px; color:var(--neon-green);">
+                    <i class="fas fa-check-circle fa-4x"></i>
+                    <h3 style="font-weight:900; font-size:1.3rem;">واتساب متصل بالكامل!</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- مودال تفاصيل الطلب -->
+    <div class="modal-overlay" id="details-modal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3 style="font-size:1.2rem; font-weight:900;"><i class="fas fa-receipt" style="color:var(--primary);"></i> تفاصيل الطلب <span id="dt-id" style="color:var(--primary); margin-right:6px;">#000</span></h3>
+                <button class="close-btn" onclick="closeDetailsModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" id="details-modal-body"></div>
+            <div class="modal-footer" id="details-modal-footer"></div>
+        </div>
+    </div>
+
+    <!-- مودال رفض الطلب / الهدر -->
+    <div class="modal-overlay" id="reject-modal">
+        <div class="modal-box" style="max-width:400px;">
+            <div class="modal-header">
+                <h3 style="font-weight:900; color:var(--danger);" id="reject-modal-title"><i class="fas fa-times-circle"></i> رفض / إلغاء الطلب</h3>
+                <button class="close-btn" onclick="closeModal('reject-modal')"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <select id="reject-reason-select" class="chat-search-input" style="margin-bottom:8px;">
+                    <option value="ضغط طلبات كبير في الصالة حالياً">ضغط طلبات كبير في الصالة حالياً</option>
+                    <option value="نفاد أحد أصناف الوجبة المطلوبة">نفاد أحد أصناف الوجبة المطلوبة</option>
+                    <option value="عنوان التوصيل خارج نطاق الخدمة">عنوان التوصيل خارج نطاق الخدمة</option>
+                    <option value="تلف أو هدر في المطبخ (Kitchen Waste)">تلف أو هدر في المطبخ (Kitchen Waste)</option>
+                </select>
+                <button class="btn-action-top" style="background:var(--danger); color:white; border:none; justify-content:center; padding:10px; width:100%; font-weight:900;" onclick="confirmRejectAction()">تأكيد الإجراء</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- مودال رمز أمان المشرف PIN -->
+    <div class="modal-overlay" id="pin-modal">
+        <div class="modal-box" style="max-width:340px;">
+            <div class="modal-header">
+                <h3 style="font-weight:900; color:var(--primary);"><i class="fas fa-lock"></i> رمز الأمان المشرف</h3>
+                <button class="close-btn" onclick="closeModal('pin-modal')"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" style="text-align:center;">
+                <p style="color:var(--text-muted); font-size:0.85rem;">أدخل رمز المشرف للمتابعة (الافتراضي: 1234):</p>
+                <input type="password" id="manager-pin-input" class="chat-search-input" style="text-align:center; font-size:1.5rem; letter-spacing:8px; margin:10px 0;" maxlength="4">
+                <button class="btn-action-top" style="background:var(--primary); color:white; border:none; width:100%; justify-content:center;" onclick="verifyManagerPin()">تحقق</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- إطار الطباعة الحرارية المخفي -->
+    <iframe id="print-iframe"></iframe>
+
+    <!-- معالجات أحداث النوافذ وربط Electron -->
+    <script>
+        function openWhatsAppModal() {
+            document.getElementById('whatsapp-modal').classList.add('active');
+            if (window.ipcRenderer) window.ipcRenderer.send('request-whatsapp-status');
+        }
+
+        function openRejectDialog(orderId, type) {
+            targetActionOrderId = orderId;
+            actionTypeInProgress = type || 'reject';
+            const title = document.getElementById('reject-modal-title');
+            if (title) title.innerHTML = type === 'cancel_accepted' ? '<i class="fas fa-trash-alt"></i> هدر أو إلغاء من المطبخ' : '<i class="fas fa-times-circle"></i> رفض الطلب';
+            document.getElementById('reject-modal').classList.add('active');
+        }
+
+        async function confirmRejectAction() {
+            if (!targetActionOrderId) return;
+            const reason = document.getElementById('reject-reason-select').value;
+            const o = allOrders.find(x => x.id === targetActionOrderId || x._docId === targetActionOrderId);
+            if (o) {
+                await db.collection('orders').doc(o._docId || targetActionOrderId).update({
+                    status: actionTypeInProgress === 'cancel_accepted' ? 'cancelled_kitchen_waste' : 'rejected',
+                    rejectReason: reason,
+                    cancelledAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            }
+            closeModal('reject-modal');
+            closeDetailsModal();
+        }
+
+        if (window.require) {
+            try {
+                const { ipcRenderer } = window.require('electron');
+                ipcRenderer.on('status-update', (event, status) => {
+                    const btn = document.getElementById('btn-wa-status');
+                    const txt = document.getElementById('text-wa-status');
+                    const loading = document.getElementById('wa-state-loading');
+                    const qr = document.getElementById('wa-state-qr');
+                    const conn = document.getElementById('wa-state-connected');
+                    if (status === 'connected') {
+                        if (btn) { btn.className = 'btn-wa-header'; txt.innerText = 'واتساب متصل ✓'; }
+                        if (loading) loading.style.display = 'none';
+                        if (qr) qr.style.display = 'none';
+                        if (conn) conn.style.display = 'flex';
+                    } else if (status === 'qr_ready') {
+                        if (btn) { btn.className = 'btn-wa-header qr-ready'; txt.innerText = 'مسح الكود المطلوب'; }
+                        if (loading) loading.style.display = 'none';
+                        if (qr) qr.style.display = 'flex';
+                        if (conn) conn.style.display = 'none';
+                    } else {
+                        if (btn) { btn.className = 'btn-wa-header disconnected'; txt.innerText = 'واتساب مفصول'; }
+                        if (loading) loading.style.display = 'flex';
+                        if (qr) qr.style.display = 'none';
+                        if (conn) conn.style.display = 'none';
+                    }
+                });
+                ipcRenderer.on('qr-code', (event, qrDataUrl) => {
+                    const img = document.getElementById('wa-qr-img');
+                    if (img) img.src = qrDataUrl;
+                    const loading = document.getElementById('wa-state-loading');
+                    const qr = document.getElementById('wa-state-qr');
+                    if (loading) loading.style.display = 'none';
+                    if (qr) qr.style.display = 'flex';
+                });
+            } catch(e) {}
+        }
+    </script>
+
+    <!-- استدعاء ملفات المنطق والبرمجة بالترتيب الصحيح -->
+    <script src="js/firebase-config.js"></script>
+    <script src="js/orders.js"></script>
+    <script src="js/chat.js"></script>
+    <script src="js/menu.js"></script>
+    <script src="js/studio.js"></script>
+    <script src="js/reports.js"></script>
+</body>
+</html>
