@@ -1,0 +1,27 @@
+{
+  "name": "fly-chicken-studio",
+  "version": "2.0.0",
+  "description": "Fly Chicken POS, KDS & Menu Studio",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build-exe": "electron-packager . FlyChickenPOS --platform=win32 --arch=x64 --out=dist --overwrite"
+  },
+  "keywords": [
+    "pos",
+    "kds",
+    "restaurant",
+    "electron"
+  ],
+  "author": "Fly Chicken",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "qrcode": "^1.5.3"
+  },
+  "devDependencies": {
+    "electron": "^29.1.5",
+    "electron-packager": "^17.1.2"
+  }
+}
